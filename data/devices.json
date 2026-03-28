@@ -1,0 +1,60 @@
+{
+  "devices": {
+    "mini_001": {
+      "deviceId": "mini_001",
+      "deviceSecret": "f3a37dedec9056ead12e60cc24d15091bfde6aca1f4c3a616a7f685c4731dace",
+      "businessName": "WicClaw Mini",
+      "pairedTelegramUser": "8698063852",
+      "status": "online",
+      "version": "mini-v1",
+      "approvedFolder": "/home/wicma/wicclaw/device/approved",
+      "assistantMode": "master-mediated",
+      "lastSeen": "2026-03-28T00:04:57.914Z",
+      "lastIp": "172.28.92.152",
+      "manifestVersion": "7e11ec8647474d90",
+      "syncStatus": "synced",
+      "syncUpdatedAt": "2026-03-28T00:04:57.914Z",
+      "runtimeReady": true,
+      "createdAt": "2026-03-27T21:57:27.634Z",
+      "pendingTasks": [],
+      "results": [
+        {
+          "taskId": "task_1774648939195",
+          "receivedAt": "2026-03-27T22:02:31.214Z",
+          "result": {
+            "filename": "test_live_final_3.txt",
+            "path": "/home/wicma/wicclaw/local-box/files/approved/test_live_final_3.txt",
+            "bytesWritten": 14
+          }
+        },
+        {
+          "taskId": "task_1774648925146",
+          "receivedAt": "2026-03-27T22:02:18.887Z",
+          "result": {
+            "filename": "test_live_final_2.txt",
+            "path": "/home/wicma/wicclaw/local-box/files/approved/test_live_final_2.txt",
+            "bytesWritten": 14
+          }
+        },
+        {
+          "taskId": "task_1774648761478",
+          "receivedAt": "2026-03-27T22:00:29.670Z",
+          "result": {
+            "filename": "test_live_final.txt",
+            "path": "/home/wicma/wicclaw/local-box/files/approved/test_live_final.txt",
+            "bytesWritten": 11
+          }
+        },
+        {
+          "taskId": "task_1774648739499",
+          "receivedAt": "2026-03-27T21:59:21.160Z",
+          "result": {
+            "filename": "test_live_final.txt hello final",
+            "path": "/home/wicma/wicclaw/local-box/files/approved/test_live_final.txt hello final",
+            "bytesWritten": 0
+          }
+        }
+      ]
+    }
+  }
+}

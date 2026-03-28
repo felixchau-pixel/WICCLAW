@@ -1,0 +1,16 @@
+{
+  "entries": {
+    "/home/wicma/wicclaw/.openclaw/openclaw.json": {
+      "lastKnownGood": {
+        "hash": "96cb38d5227195d9334bc24f0e23cea15c1394aa1d8fbac7616d66ce64036b82",
+        "bytes": 1087,
+        "mtimeMs": 1774648942339.1814,
+        "ctimeMs": 1774648942347.5984,
+        "hasMeta": true,
+        "gatewayMode": "local",
+        "observedAt": "2026-03-27T22:02:23.552Z"
+      },
+      "lastObservedSuspiciousSignature": null
+    }
+  }
+}

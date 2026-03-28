@@ -1,0 +1,28 @@
+{
+  "logging": {
+    "level": "info",
+    "file": "/home/wicma/wicclaw/.openclaw/openclaw.log"
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/home/wicma/wicclaw",
+      "heartbeat": {
+        "every": "0m"
+      },
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-5"
+      },
+      "models": {
+        "anthropic/claude-sonnet-4-5": {}
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "none"
+    },
+    "port": 18789
+  }
+}

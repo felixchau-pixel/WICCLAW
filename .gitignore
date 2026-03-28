@@ -1,0 +1,17 @@
+# env
+.env
+.env.*
+device/.env
+
+# node
+node_modules/
+npm-debug.log*
+
+# runtime
+runtime/
+*.log
+*.lock
+
+# OS
+.DS_Store
+Thumbs.db

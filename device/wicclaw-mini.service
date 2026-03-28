@@ -1,0 +1,20 @@
+[Unit]
+Description=WicClaw Mini Assistant Appliance
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wicma
+Group=wicma
+WorkingDirectory=/home/wicma/wicclaw/device
+Environment=HOME=/home/wicma
+Environment=NODE_BIN=/home/wicma/.nvm/versions/node/v22.22.2/bin/node
+Environment=PATH=/home/wicma/.nvm/versions/node/v22.22.2/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/wicma/wicclaw/device/start-mini.sh --run
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
