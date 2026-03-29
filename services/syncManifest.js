@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { getApprovedOpenClawSkills } = require('../core/openclawSkills');
 
 const rootDir = path.join(__dirname, '..');
 const packageJsonPath = path.join(rootDir, 'package.json');
@@ -8,13 +9,32 @@ const packageJsonPath = path.join(rootDir, 'package.json');
 const manifestFiles = [
   'CLAUDE.md',
   'core/permissions.js',
+  'core/openclawSkills.js',
   'core/taskValidator.js',
+  'prompts/telegram-live.md',
+  'services/chatProfiles.js',
+  'services/googleConnect.js',
+  'services/onboardingLink.js',
+  'services/fileSummary.js',
+  'services/telegram.js',
   'services/taskDispatch.js',
   'services/openclawAdapter.js',
+  'scripts/openclaw-master-chat.js',
+  'scripts/openclaw-master.js',
   'skills/onboarding.js',
   'skills/quote.js',
   'skills/promo.js',
-  'skills/calendar.js'
+  'skills/calendar.js',
+  'skills/word-docx/SKILL.md',
+  'skills/excel-xlsx/SKILL.md',
+  'skills/productivity/SKILL.md',
+  'skills/productivity/setup.md',
+  'skills/productivity/frameworks.md',
+  'skills/productivity/traps.md',
+  'skills/productivity/memory-template.md',
+  'skills/productivity/system-template.md',
+  'bin/gog',
+  'bin/himalaya'
 ];
 
 function readPackageJson() {
@@ -53,7 +73,33 @@ function getMasterManifest() {
     openclawVersion: getOpenClawPackageVersion(),
     assistantMode: 'master-mediated',
     workflows: ['onboarding', 'quote', 'promo', 'calendar'],
-    commands: ['/pair', '/run', '/devices', '/status', '/agent', '/ask'],
+    commands: ['/start', '/pair', '/run', '/devices', '/status', '/agent', '/ask', '/openclaw', '/reset'],
+    approvedOpenClawSkills: getApprovedOpenClawSkills(),
+    publishedRuntime: {
+      telegramStartPayloadVersion: 1,
+      approvedRuntimeAssets: [
+        'prompts/telegram-live.md',
+        'core/openclawSkills.js',
+        'services/chatProfiles.js',
+        'services/googleConnect.js',
+        'services/fileSummary.js',
+        'skills/word-docx/SKILL.md',
+        'skills/excel-xlsx/SKILL.md',
+        'skills/productivity/SKILL.md',
+        'skills/productivity/setup.md',
+        'skills/productivity/frameworks.md',
+        'skills/productivity/traps.md',
+        'skills/productivity/memory-template.md',
+        'skills/productivity/system-template.md',
+        'bin/gog',
+        'bin/himalaya'
+      ],
+      approvedWorkspaceSkills: [
+        'word-docx',
+        'excel-xlsx',
+        'productivity'
+      ]
+    },
     syncFiles: manifestFiles,
     policies: {
       validatorRequired: true,

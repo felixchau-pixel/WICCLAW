@@ -1,0 +1,90 @@
+{
+  "requests": {
+    "Y05Tgoj0bVdkh5kwi1p3sCiv": {
+      "token": "Y05Tgoj0bVdkh5kwi1p3sCiv",
+      "chatId": "900002",
+      "service": "google",
+      "createdAt": "2026-03-29T01:02:50.070Z",
+      "status": "pending"
+    },
+    "TwJRSI61G2FtyVw8Za-p9pKj": {
+      "token": "TwJRSI61G2FtyVw8Za-p9pKj",
+      "chatId": "900002",
+      "service": "calendar",
+      "createdAt": "2026-03-29T01:02:50.072Z",
+      "status": "pending"
+    },
+    "UOplo_ayqe2Ud5WcuaPPt1le": {
+      "token": "UOplo_ayqe2Ud5WcuaPPt1le",
+      "chatId": "900002",
+      "service": "email",
+      "createdAt": "2026-03-29T01:02:50.073Z",
+      "status": "pending"
+    },
+    "I2j7erVk6CdkUMAsylH8J0vL": {
+      "token": "I2j7erVk6CdkUMAsylH8J0vL",
+      "chatId": "900003",
+      "service": "google",
+      "createdAt": "2026-03-29T01:03:54.495Z",
+      "status": "callback_received",
+      "blocker": "OAuth client credentials missing",
+      "chatState": {
+        "google": {
+          "connected": false,
+          "status": "callback_received",
+          "service": "google"
+        }
+      },
+      "updatedAt": "2026-03-29T01:16:41.989Z",
+      "callbackUrl": "/auth/google/callback?state=I2j7erVk6CdkUMAsylH8J0vL.1lRci5q6vIJpHWG91bxF7GrC&code=test-code"
+    },
+    "GtKxW8fMGJzZMQLzREZ1W7dX": {
+      "token": "GtKxW8fMGJzZMQLzREZ1W7dX",
+      "chatId": "8698063852",
+      "service": "google",
+      "createdAt": "2026-03-29T21:21:35.556Z",
+      "status": "pending"
+    },
+    "GpQU7UhN5egAJDCQ_dT3u_bf": {
+      "token": "GpQU7UhN5egAJDCQ_dT3u_bf",
+      "chatId": "8698063852",
+      "service": "google",
+      "createdAt": "2026-03-29T21:21:42.939Z",
+      "status": "pending"
+    },
+    "JYa1bqtTY5m3Gth7Gc0aQBQz": {
+      "token": "JYa1bqtTY5m3Gth7Gc0aQBQz",
+      "chatId": "8698063852",
+      "service": "google",
+      "createdAt": "2026-03-29T21:22:16.376Z",
+      "status": "callback_received",
+      "callbackUrl": "/auth/google/callback?state=JYa1bqtTY5m3Gth7Gc0aQBQz.BLQuEymxw7W_r9DoF_eQOuYu&code=test-code",
+      "chatState": {
+        "google": {
+          "connected": false,
+          "status": "callback_received",
+          "service": "google"
+        }
+      },
+      "updatedAt": "2026-03-29T21:22:16.378Z"
+    }
+  },
+  "chatStates": {
+    "900003": {
+      "google": {
+        "connected": false,
+        "status": "callback_received",
+        "service": "google"
+      },
+      "updatedAt": "2026-03-29T01:16:41.989Z"
+    },
+    "8698063852": {
+      "google": {
+        "connected": false,
+        "status": "callback_received",
+        "service": "google"
+      },
+      "updatedAt": "2026-03-29T21:22:16.378Z"
+    }
+  }
+}

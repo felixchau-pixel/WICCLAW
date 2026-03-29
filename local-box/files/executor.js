@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { summarizeApprovedFile } = require('../../services/fileSummary');
 
 const blockedCommandTokens = [
   'rm ',
@@ -157,6 +158,10 @@ function executeTask(task, options = {}) {
       return moveApprovedFile(task.payload.from, task.payload.to, options);
     case 'list_files':
       return listApprovedFiles(options);
+    case 'summarize_file': {
+      const targetPath = resolveApprovedPath(task.payload.filename, options.approvedFolder);
+      return summarizeApprovedFile(targetPath);
+    }
     case 'exec_cmd':
       return executeApprovedCommand(task.payload.command, options);
     default:

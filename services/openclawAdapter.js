@@ -1,100 +1,119 @@
-const { spawnSync } = require('child_process');
+const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 
 const projectRoot = path.join(__dirname, '..');
-const statusScript = path.join(projectRoot, 'scripts', 'openclaw-status.js');
-const runnerScript = path.join(projectRoot, 'scripts', 'openclaw-task-runner.js');
-const chatScript = path.join(projectRoot, 'scripts', 'openclaw-master-chat.js');
+const bridgeRoot = path.join(projectRoot, '.openclaw-bridge');
+const requestDir = path.join(bridgeRoot, 'requests');
+const responseDir = path.join(bridgeRoot, 'responses');
 
-function runNodeScript(scriptPath, input) {
-  const command = `'${process.execPath.replace(/'/g, `'\\''`)}' '${scriptPath.replace(/'/g, `'\\''`)}'`;
-  return spawnSync('bash', ['-lc', command], {
-    cwd: projectRoot,
-    env: process.env,
-    input,
-    encoding: 'utf8',
-    timeout: Number(process.env.OPENCLAW_TIMEOUT_MS || 120000)
-  });
-}
+function getConfiguredGatewayAddress() {
+  const configPath =
+    process.env.OPENCLAW_CONFIG_PATH ||
+    process.env.OPENCLAW_CONFIG ||
+    path.join(projectRoot, '.openclaw', 'openclaw.json');
 
-function tryParseJson(value) {
+  let config = {};
   try {
-    return JSON.parse(String(value || '').trim());
-  } catch {
-    return null;
-  }
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch {}
+
+  const gateway = config.gateway || {};
+  const host =
+    process.env.OPENCLAW_HOST ||
+    gateway.customBindHost ||
+    (gateway.bind === 'custom' ? gateway.host : '') ||
+    '127.0.0.1';
+  const port = Number(process.env.OPENCLAW_PORT || gateway.port || 18789);
+  return { host, port };
 }
 
-function getOpenClawStatus() {
-  const child = runNodeScript(statusScript, '');
+async function bridgeRequest(kind, input = {}) {
+  const timeoutMs = Number(process.env.OPENCLAW_TIMEOUT_MS || 120000);
+  fs.mkdirSync(requestDir, { recursive: true });
+  fs.mkdirSync(responseDir, { recursive: true });
 
-  if (child.error && child.status === null) {
+  const requestId = `${Date.now()}-${crypto.randomUUID()}`;
+  const requestPath = path.join(requestDir, `${requestId}.json`);
+  const responsePath = path.join(responseDir, `${requestId}.json`);
+
+  fs.writeFileSync(requestPath, JSON.stringify({ kind, input }));
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (fs.existsSync(responsePath)) {
+      const raw = fs.readFileSync(responsePath, 'utf8');
+      fs.rmSync(responsePath, { force: true });
+      return JSON.parse(raw);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+
+  throw new Error(`OpenClaw bridge timed out after ${timeoutMs}ms`);
+}
+
+async function getOpenClawStatus() {
+  const localPackageJson = path.join(projectRoot, 'node_modules', 'openclaw', 'package.json');
+  let version = null;
+
+  try {
+    const manifest = JSON.parse(fs.readFileSync(localPackageJson, 'utf8'));
+    version = `OpenClaw ${manifest.version || 'unknown'}`;
+  } catch (error) {
     return {
       enabled: true,
       ready: false,
       running: false,
-      blockers: [child.error.message]
+      version: null,
+      gateway: null,
+      blockers: [error.message || 'OpenClaw runtime files are missing']
     };
   }
 
-  const parsed = tryParseJson(child.stdout);
-  if (parsed) {
-    return parsed;
+  const gateway = getConfiguredGatewayAddress();
+  const response = await bridgeRequest('status');
+  if (response && typeof response === 'object') {
+    return {
+      ...response,
+      version: response.version || version,
+      gateway: response.gateway || { host: gateway.host, port: gateway.port }
+    };
   }
 
   return {
     enabled: true,
     ready: false,
     running: false,
-    blockers: [String(child.stderr || child.stdout || 'Unable to read OpenClaw status').trim()]
+    version,
+    gateway: {
+      host: gateway.host,
+      port: gateway.port
+    },
+    blockers: ['OpenClaw bridge returned invalid status payload']
   };
 }
 
 async function executeTaskViaOpenClaw({ deviceId, taskId, task }) {
-  const child = runNodeScript(runnerScript, JSON.stringify({ deviceId, taskId, task }));
-
-  if (child.error && child.status === null) {
-    return {
-      ok: false,
-      available: false,
-      error: child.error.message
-    };
-  }
-
-  const parsed = tryParseJson(child.stdout);
-  if (parsed) {
-    return parsed;
-  }
-
-  const stderr = String(child.stderr || '').trim();
+  const parsed = await bridgeRequest('task', { deviceId, taskId, task });
   return {
-    ok: false,
-    available: child.status === 0,
-    error: stderr || 'OpenClaw returned invalid output',
-    raw: String(child.stdout || '').trim()
+    ok: Boolean(parsed?.ok),
+    available: Boolean(parsed?.available ?? true),
+    result: parsed?.result || null,
+    error: parsed?.error || null,
+    raw: parsed
   };
 }
 
 async function converseWithOpenClaw(input) {
-  const child = runNodeScript(chatScript, JSON.stringify(input));
-
-  if (child.error && child.status === null) {
-    return {
-      ok: false,
-      available: false,
-      error: child.error.message
-    };
-  }
-
-  const parsed = tryParseJson(child.stdout);
-  if (parsed) {
-    return parsed;
-  }
-
+  const parsed = await bridgeRequest('chat', input);
   return {
-    ok: false,
-    available: child.status === 0,
-    error: String(child.stderr || child.stdout || 'OpenClaw returned invalid output').trim()
+    ok: Boolean(parsed?.ok),
+    available: Boolean(parsed?.available ?? true),
+    reply: String(parsed?.reply || '').trim(),
+    proposedActions: Array.isArray(parsed?.proposedActions) ? parsed.proposedActions : [],
+    blockers: Array.isArray(parsed?.blockers) ? parsed.blockers : [],
+    error: parsed?.error || null
   };
 }
 

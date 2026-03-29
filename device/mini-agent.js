@@ -40,10 +40,31 @@ function getMiniConfig() {
     resolvedCloudUrl = defaultCloudUrl;
   } else if (/<[^>]+>/.test(String(rawCloudUrl || ''))) {
     resolvedCloudUrl = String(rawCloudUrl).replace(/<[^>]+>/g, '127.0.0.1');
+  } else if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(String(rawCloudUrl || ''))) {
+    resolvedCloudUrl = `http://${String(rawCloudUrl).replace(/^\/+/, '')}`;
   }
 
+  try {
+    const parsedCloudUrl = new URL(String(resolvedCloudUrl));
+    if (!parsedCloudUrl.port) {
+      parsedCloudUrl.port = String(process.env.PORT || 3000);
+      resolvedCloudUrl = parsedCloudUrl.toString().replace(/\/$/, '');
+    }
+  } catch {}
+
   return {
-    cloudUrl: resolvedCloudUrl,
+    cloudUrl:
+      fs.existsSync(path.join(__dirname, '..', 'server.js')) &&
+      fs.existsSync(path.join(__dirname, '..', '.env')) &&
+      resolvedCloudUrl !== defaultCloudUrl
+        ? defaultCloudUrl
+        : resolvedCloudUrl,
+    fallbackCloudUrl:
+      fs.existsSync(path.join(__dirname, '..', 'server.js')) &&
+      fs.existsSync(path.join(__dirname, '..', '.env')) &&
+      resolvedCloudUrl !== defaultCloudUrl
+        ? resolvedCloudUrl
+        : '',
     deviceId: process.env.DEVICE_ID,
     deviceSecret: process.env.DEVICE_SECRET,
     masterApiToken: process.env.MASTER_API_TOKEN,
@@ -86,8 +107,8 @@ function ensureRuntimeFolders(config) {
 }
 
 function createRequester(config, fetchImpl = fetch) {
-  return async function requestJson(pathname, options = {}) {
-    const response = await fetchImpl(`${config.cloudUrl}${pathname}`, {
+  async function requestFromBase(baseUrl, pathname, options = {}) {
+    const response = await fetchImpl(`${baseUrl}${pathname}`, {
       ...options,
       headers: {
         Authorization: `Bearer ${config.masterApiToken}`,
@@ -98,13 +119,39 @@ function createRequester(config, fetchImpl = fetch) {
       }
     });
 
-    const json = await response.json();
+    const text = await response.text();
+    let json = null;
+
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch (error) {
+      throw new Error(`Non-JSON response from ${baseUrl}${pathname}: ${text.slice(0, 160)}`);
+    }
 
     if (!response.ok) {
-      throw new Error(json.error || `HTTP ${response.status}`);
+      const error = new Error(json.error || `HTTP ${response.status}`);
+      error.statusCode = response.status;
+      throw error;
     }
 
     return json;
+  }
+
+  return async function requestJson(pathname, options = {}) {
+    try {
+      return await requestFromBase(config.cloudUrl, pathname, options);
+    } catch (error) {
+      const shouldFallback =
+        config.fallbackCloudUrl &&
+        config.fallbackCloudUrl !== config.cloudUrl &&
+        (!error.statusCode || error.statusCode >= 500 || /non-json response/i.test(error.message) || /fetch failed/i.test(error.message) || /connect/i.test(error.message));
+
+      if (!shouldFallback) {
+        throw error;
+      }
+
+      return requestFromBase(config.fallbackCloudUrl, pathname, options);
+    }
   };
 }
 
@@ -204,6 +251,7 @@ function createMiniAgent(options = {}) {
   async function runOnce() {
     await sendHeartbeat();
     await syncWithMaster();
+    await sendHeartbeat();
     const taskRecord = await pollTask();
 
     if (!taskRecord) {

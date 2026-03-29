@@ -6,6 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const projectRoot = path.join(__dirname, '..');
+const { getApprovedOpenClawSkills } = require('../core/openclawSkills');
 const openclawHome =
   process.env.OPENCLAW_STATE_DIR ||
   process.env.OPENCLAW_HOME ||
@@ -15,6 +16,7 @@ const openclawConfigPath =
   process.env.OPENCLAW_CONFIG ||
   path.join(openclawHome, 'openclaw.json');
 const approvedFolder = process.env.APPROVED_FOLDER || path.join(projectRoot, 'local-box', 'files', 'approved');
+const projectBinDir = path.join(projectRoot, 'bin');
 
 function ensureDir(target) {
   fs.mkdirSync(target, { recursive: true });
@@ -46,7 +48,14 @@ function ensureConfig() {
         models: {
           [`${provider}/${model}`]: {}
         }
-      }
+      },
+      list: [
+        {
+          id: 'main',
+          default: true,
+          skills: getApprovedOpenClawSkills()
+        }
+      ]
     },
     gateway: {
       mode: 'local',
@@ -98,7 +107,8 @@ function run(args) {
       OPENCLAW_CONFIG_PATH: openclawConfigPath,
       OPENCLAW_SKILLS_PATH: path.join(projectRoot, 'skills'),
       OPENCLAW_MEMORY_PATH: path.join(openclawHome, 'memory'),
-      HOME: process.env.HOME || os.homedir()
+      HOME: process.env.HOME || os.homedir(),
+      PATH: `${projectBinDir}:${process.env.PATH || ''}`
     },
     encoding: 'utf8'
   });

@@ -2,25 +2,54 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { spawnSync } = require('child_process');
 
 const projectRoot = path.join(__dirname, '..');
+const promptPath = path.join(projectRoot, 'prompts', 'telegram-live.md');
+const openclawHome =
+  process.env.OPENCLAW_STATE_DIR ||
+  process.env.OPENCLAW_HOME ||
+  path.join(projectRoot, '.openclaw');
+const openclawConfigPath =
+  process.env.OPENCLAW_CONFIG_PATH ||
+  process.env.OPENCLAW_CONFIG ||
+  path.join(openclawHome, 'openclaw.json');
+const projectBinDir = path.join(projectRoot, 'bin');
 
-function parseInput() {
-  return JSON.parse(fs.readFileSync(0, 'utf8'));
+function findOpenClawCommand() {
+  if (process.env.OPENCLAW_BIN) {
+    return [process.env.OPENCLAW_BIN];
+  }
+
+  const localBinary = path.join(projectRoot, 'node_modules', '.bin', 'openclaw');
+  if (fs.existsSync(localBinary)) {
+    return [localBinary];
+  }
+
+  const localEntrypoint = path.join(projectRoot, 'node_modules', 'openclaw', 'openclaw.mjs');
+  if (fs.existsSync(localEntrypoint)) {
+    return [process.execPath, localEntrypoint];
+  }
+
+  return ['openclaw'];
 }
 
-function buildPrompt(input) {
+function parseInput() {
+  const raw = String(fs.readFileSync(0, 'utf8') || '').trim();
+  return raw ? JSON.parse(raw) : {};
+}
+
+function readPromptTemplate() {
+  return fs.readFileSync(promptPath, 'utf8').trim();
+}
+
+function buildPrompt(template, input) {
   return [
-    'You are the WicClaw master OpenClaw brain.',
-    'You can reason, summarize state, plan next steps, and propose safe structured actions.',
-    'You must not claim that actions already executed.',
-    'You must not produce shell commands.',
-    'Any proposed action must be a task proposal only, not execution.',
-    'Return JSON only.',
-    'Required JSON shape:',
-    '{"reply":"string","proposedActions":[{"deviceId":"string","task":{"type":"string","payload":{}},"why":"string"}],"blockers":["string"]}',
-    `Input JSON: ${JSON.stringify(input)}`
+    template,
+    '',
+    'Input JSON:',
+    JSON.stringify(input)
   ].join('\n');
 }
 
@@ -60,27 +89,41 @@ function extractJson(text) {
 }
 
 const input = parseInput();
-const prompt = buildPrompt(input);
+const template = readPromptTemplate();
+const prompt = buildPrompt(template, input);
+const sessionId = String(input.sessionId || input.chatId || 'telegram-chat-default')
+  .replace(/[^a-zA-Z0-9_-]/g, '_')
+  .slice(0, 120);
 const command = [
-  `'${process.execPath.replace(/'/g, `'\\''`)}'`,
-  `'${path.join(__dirname, 'openclaw-master.js').replace(/'/g, `'\\''`)}'`,
+  ...findOpenClawCommand(),
   'agent',
   '--agent',
   'main',
   '--session-id',
-  'wicclaw-master-admin',
+  sessionId,
   '--local',
   '--json',
   '--message',
-  `'${prompt.replace(/'/g, `'\\''`)}'`,
+  prompt,
   '--thinking',
-  'high',
+  process.env.OPENCLAW_CHAT_THINKING || 'minimal',
   '--timeout',
   String(Number(process.env.OPENCLAW_AGENT_TIMEOUT_SECONDS || 120))
-].join(' ');
+];
 
-const child = spawnSync('bash', ['-lc', command], {
+const child = spawnSync(command[0], command.slice(1), {
   cwd: projectRoot,
+  env: {
+    ...process.env,
+    OPENCLAW_STATE_DIR: openclawHome,
+    OPENCLAW_HOME: openclawHome,
+    OPENCLAW_CONFIG_PATH: openclawConfigPath,
+    OPENCLAW_CONFIG: openclawConfigPath,
+    OPENCLAW_SKILLS_PATH: path.join(projectRoot, 'skills'),
+    OPENCLAW_MEMORY_PATH: path.join(openclawHome, 'memory'),
+    HOME: process.env.HOME || os.homedir(),
+    PATH: `${projectBinDir}:${process.env.PATH || ''}`
+  },
   encoding: 'utf8',
   timeout: Number(process.env.OPENCLAW_TIMEOUT_MS || 120000)
 });
@@ -96,7 +139,7 @@ if (!parsed) {
   process.stdout.write(`${JSON.stringify({
     ok: false,
     available: child.status === 0,
-    error: String(child.stderr || child.stdout || 'OpenClaw returned invalid output').trim()
+    error: String(child.stderr || child.stdout || 'OpenClaw chat failed').trim()
   })}\n`);
   process.exit(child.status || 1);
 }

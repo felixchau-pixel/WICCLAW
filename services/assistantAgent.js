@@ -52,6 +52,19 @@ function normalizeNaturalIntent(message) {
     };
   }
 
+  const summarizeMatch = text.match(/(?:summarize|analyze|review)\s+(?:file\s+|invoice\s+|spreadsheet\s+|document\s+)?([A-Za-z0-9._/-]+\.(?:docx|xlsx|xls|xlsm|csv|tsv|txt|md|json))/i);
+  if (summarizeMatch) {
+    return {
+      type: 'structured_task',
+      task: {
+        type: 'summarize_file',
+        payload: {
+          filename: summarizeMatch[1].trim()
+        }
+      }
+    };
+  }
+
   const listIntent = lower.includes('list files') || lower === 'list' || lower.includes('show files');
   if (listIntent) {
     return {
@@ -112,6 +125,10 @@ function parseAssistantTask(message) {
 
   if (lower.startsWith('result ')) {
     return { type: 'get_result', payload: { taskId: text.slice(7).trim() } };
+  }
+
+  if (lower.startsWith('summarize ')) {
+    return { type: 'summarize_file', payload: { filename: text.slice(10).trim() } };
   }
 
   return null;

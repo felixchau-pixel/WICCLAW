@@ -1,9 +1,10 @@
 require('dotenv').config();
 
 const express = require('express');
+const fs = require('fs');
 
 const { isUnsetOrPlaceholder } = require('./core/env');
-const { startTelegram } = require('./services/telegram');
+const { startTelegram, getTelegramBotIdentity } = require('./services/telegram');
 const { validateTask } = require('./core/taskValidator');
 const { canExecute } = require('./core/permissions');
 const {
@@ -17,6 +18,8 @@ const {
 } = require('./services/deviceRegistry');
 const { dispatchTask } = require('./services/taskDispatch');
 const { getMasterManifest } = require('./services/syncManifest');
+const { buildOnboardingAsset, getQrFilePath } = require('./services/onboardingLink');
+const { validateState, updateConnectRequest, getChatConnectState } = require('./services/googleConnect');
 
 function createApp() {
   const app = express();
@@ -80,6 +83,109 @@ function createApp() {
       manifest: getMasterManifest(),
       device
     });
+  });
+
+  app.get('/api/onboarding/:deviceId', requireMasterToken, async (req, res) => {
+    const device = getDeviceStatus(req.params.deviceId);
+
+    if (!device) {
+      return res.status(404).json({ ok: false, error: 'Device not found' });
+    }
+
+    const identity = await getTelegramBotIdentity();
+    const asset = buildOnboardingAsset({
+      deviceId: req.params.deviceId,
+      botUsername: identity.username
+    });
+
+    return res.json({
+      ok: true,
+      device,
+      onboarding: {
+        ...asset,
+        qrApiPath: `/api/onboarding/${req.params.deviceId}/qr.svg`
+      }
+    });
+  });
+
+  app.get('/api/onboarding/:deviceId/qr.svg', requireMasterToken, async (req, res) => {
+    const device = getDeviceStatus(req.params.deviceId);
+
+    if (!device) {
+      return res.status(404).type('text/plain').send('Device not found');
+    }
+
+    const identity = await getTelegramBotIdentity();
+    const asset = buildOnboardingAsset({
+      deviceId: req.params.deviceId,
+      botUsername: identity.username
+    });
+
+    const svg = fs.readFileSync(getQrFilePath(req.params.deviceId), 'utf8');
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('X-Telegram-Deep-Link', asset.deepLink);
+    return res.send(svg);
+  });
+
+  app.get('/auth/google/start', (req, res) => {
+    const validated = validateState(req.query.state);
+    if (!validated.ok) {
+      return res.status(400).type('text/plain').send(validated.error);
+    }
+
+    const clientPath = `${process.env.HOME || '/home/wicma'}/.config/gogcli/credentials.json`;
+    if (!fs.existsSync(clientPath)) {
+      updateConnectRequest(validated.request.token, {
+        status: 'blocked',
+        blocker: 'OAuth client credentials missing',
+        chatState: {
+          google: {
+            connected: false,
+            status: 'blocked',
+            blocker: 'OAuth client credentials missing',
+            service: validated.request.service
+          }
+        }
+      });
+      return res.status(503).type('text/plain').send('OAuth client credentials missing on the master host.');
+    }
+
+    updateConnectRequest(validated.request.token, {
+      status: 'ready_for_oauth',
+      chatState: {
+        google: {
+          connected: false,
+          status: 'ready_for_oauth',
+          service: validated.request.service
+        }
+      }
+    });
+    return res.type('text/plain').send('Google OAuth start endpoint is ready. Complete the gog auth flow on the master host.');
+  });
+
+  app.get('/auth/google/callback', (req, res) => {
+    const validated = validateState(req.query.state);
+    if (!validated.ok) {
+      return res.status(400).type('text/plain').send(validated.error);
+    }
+
+    updateConnectRequest(validated.request.token, {
+      status: 'callback_received',
+      callbackUrl: req.originalUrl,
+      chatState: {
+        google: {
+          connected: false,
+          status: 'callback_received',
+          service: validated.request.service
+        }
+      }
+    });
+
+    return res.type('text/plain').send('Google callback received. Complete token exchange on the master host.');
+  });
+
+  app.get('/api/google/connect-state/:chatId', requireMasterToken, (req, res) => {
+    return res.json({ ok: true, state: getChatConnectState(req.params.chatId) });
   });
 
   app.post('/api/heartbeat', (req, res) => {

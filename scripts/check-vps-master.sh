@@ -9,12 +9,14 @@ required_files=(
   "CLAUDE.md"
   "server.js"
   "core/env.js"
+  "core/openclawSkills.js"
   "core/taskValidator.js"
   "core/permissions.js"
   "services/openclawAdapter.js"
   "services/taskDispatch.js"
   "services/masterAgent.js"
   "services/assistantAgent.js"
+  "services/onboardingLink.js"
   "services/syncManifest.js"
   "device/mini-agent.js"
   "device/executor.js"
@@ -25,6 +27,7 @@ required_files=(
   "scripts/openclaw-status.js"
   "scripts/openclaw-task-runner.js"
   "scripts/test-assistant-appliance.js"
+  "prompts/telegram-live.md"
 )
 
 for file in "${required_files[@]}"; do

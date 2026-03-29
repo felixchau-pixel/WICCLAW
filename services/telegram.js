@@ -6,7 +6,14 @@ const { isUnsetOrPlaceholder } = require('../core/env');
 const { routeMessage } = require('../core/router');
 const { validateTask } = require('../core/taskValidator');
 const { canExecute } = require('../core/permissions');
-const { getSession, resetSession, incrementRetry, clearRetry } = require('../core/session');
+const {
+  getSession,
+  resetSession,
+  getOpenClawSessionId,
+  resetOpenClawSession,
+  incrementRetry,
+  clearRetry
+} = require('../core/session');
 const { writeApprovedFile } = require('../local-box/files/executor');
 const {
   getDeviceById,
@@ -16,16 +23,23 @@ const {
   getTaskResult
 } = require('./deviceRegistry');
 const { dispatchTask } = require('./taskDispatch');
-const { getOpenClawStatus } = require('./openclawAdapter');
+const { getOpenClawStatus, converseWithOpenClaw } = require('./openclawAdapter');
 const { replyToMasterAgent } = require('./masterAgent');
 const { replyToAssistant } = require('./assistantAgent');
+const { parsePairingPayload } = require('./onboardingLink');
+const { getProfile, saveProfileAnswer, summarizeProfile } = require('./chatProfiles');
+const { buildConnectLink, getChatConnectState } = require('./googleConnect');
 const { startOnboarding, handleOnboarding } = require('../skills/onboarding');
 const { startQuote, handleQuote } = require('../skills/quote');
 const { startPromo, handlePromo } = require('../skills/promo');
 const { calendarMock } = require('../skills/calendar');
 
 let botInstance = null;
+let botIdentityPromise = null;
+let botMode = 'idle';
+let pollingStarted = false;
 const telegramLockPath = path.join(__dirname, '..', '.telegram-polling.lock');
+const TELEGRAM_MESSAGE_LIMIT = 3500;
 
 function isLivePid(pid) {
   if (!pid) {
@@ -83,8 +97,10 @@ function logTelegramEvent(chatId, text) {
   console.log(`telegram chat=${chatId} command=${command}`);
 }
 
-function getBot() {
-  if (botInstance) {
+function getBot(options = {}) {
+  const requestedPolling = Boolean(options.polling);
+
+  if (botInstance && (!requestedPolling || botMode === 'polling')) {
     return botInstance;
   }
 
@@ -93,9 +109,26 @@ function getBot() {
     throw new Error('Missing TELEGRAM_BOT_TOKEN in environment');
   }
 
-  const polling = process.env.DISABLE_TELEGRAM_POLLING === 'true' ? false : true;
+  const polling = requestedPolling && process.env.DISABLE_TELEGRAM_POLLING !== 'true';
+
+  if (botInstance && botMode === 'idle' && polling) {
+    try {
+      botInstance.stopPolling();
+    } catch {}
+    botInstance = null;
+  }
+
   botInstance = new TelegramBot(token, { polling });
+  botMode = polling ? 'polling' : 'idle';
   return botInstance;
+}
+
+async function getTelegramBotIdentity() {
+  if (!botIdentityPromise) {
+    botIdentityPromise = getBot().getMe();
+  }
+
+  return botIdentityPromise;
 }
 
 function isAdmin(chatId) {
@@ -109,6 +142,23 @@ function isAdmin(chatId) {
 
 function tooManyRetries(chatId) {
   return incrementRetry(chatId) >= 3;
+}
+
+async function sendTelegramReply(bot, chatId, text) {
+  const normalized = String(text ?? '').trim() || 'Empty reply';
+  const chunks = [];
+
+  for (let offset = 0; offset < normalized.length; offset += TELEGRAM_MESSAGE_LIMIT) {
+    chunks.push(normalized.slice(offset, offset + TELEGRAM_MESSAGE_LIMIT));
+  }
+
+  if (!chunks.length) {
+    chunks.push('Empty reply');
+  }
+
+  for (const chunk of chunks) {
+    await bot.sendMessage(chatId, chunk);
+  }
 }
 
 function formatDevice(device) {
@@ -186,6 +236,13 @@ function parseRunCommand(raw) {
     return { type: 'list_files', payload: {} };
   }
 
+  if (trimmed.startsWith('summarize ')) {
+    return {
+      type: 'summarize_file',
+      payload: { filename: trimmed.slice(10).trim() }
+    };
+  }
+
   if (trimmed.startsWith('result ')) {
     return {
       type: 'get_result',
@@ -223,6 +280,114 @@ async function handleSession(chatId, text) {
   }
 
   return null;
+}
+
+async function handleOpenClawChat({ chatId, text, mode = 'telegram_chat' }) {
+  const sessionId = getOpenClawSessionId(chatId);
+  const profile = summarizeProfile(getProfile(chatId));
+  const connectState = getChatConnectState(chatId);
+  const prompt = isConnectIntent(text)
+    ? [
+        String(text || '').trim(),
+        '',
+        'Google connect context for this Telegram chat:',
+        buildConnectReply(chatId, text),
+        'If the user wants to connect Google, calendar, or email, include the exact bound link above in your reply.'
+      ].join('\n')
+    : text;
+  const result = await converseWithOpenClaw({
+    mode,
+    chatId: String(chatId),
+    sessionId,
+    message: prompt,
+    profile,
+    connectState
+  });
+
+  if (!result.ok) {
+    if (isConnectIntent(text)) {
+      return buildConnectReply(chatId, text);
+    }
+    return `OpenClaw chat unavailable: ${result.error || 'unknown error'}`;
+  }
+
+  const reply = String(result.reply || '').trim();
+  if (!reply) {
+    if (isConnectIntent(text)) {
+      return buildConnectReply(chatId, text);
+    }
+    return 'OpenClaw chat unavailable: empty reply';
+  }
+
+  return reply;
+}
+
+function isConnectIntent(text) {
+  const lower = String(text || '').toLowerCase();
+  return lower.includes('connect my google') || lower.includes('connect my calendar') || lower.includes('connect my email');
+}
+
+function getConnectService(text) {
+  const lower = String(text || '').toLowerCase();
+  if (lower.includes('calendar')) {
+    return 'calendar';
+  }
+  if (lower.includes('email')) {
+    return 'email';
+  }
+  return 'google';
+}
+
+function buildConnectReply(chatId, text) {
+  const service = getConnectService(text);
+  const link = buildConnectLink({ chatId, service });
+  const status = getChatConnectState(chatId)?.google?.status || 'disconnected';
+  return [
+    `Google connect link for this chat (${service}):`,
+    link.url,
+    `Current Google state: ${status}`,
+    'This link is bound to this Telegram chat only.'
+  ].join('\n');
+}
+
+function buildProfileCompleteMessage(profile) {
+  const summary = summarizeProfile(profile);
+  return [
+    'Profile saved.',
+    `I will call you: ${summary.userName || '-'}`,
+    `You call me: ${summary.assistantName || '-'}`,
+    `Business: ${summary.businessName || '-'} (${summary.businessType || '-'})`
+  ].join('\n');
+}
+
+async function handleStartCommand(chatId, text) {
+  const payload = String(text || '').replace(/^\/start\s*/, '').trim();
+
+  if (!payload) {
+    return handleOpenClawChat({
+      chatId,
+      text: 'Introduce yourself as the live WicClaw Telegram assistant and summarize what you can do in this chat.',
+      mode: 'telegram_start'
+    });
+  }
+
+  const parsed = parsePairingPayload(payload);
+  if (!parsed.ok) {
+    return parsed.error;
+  }
+
+  const paired = pairDevice(parsed.deviceId, chatId, { force: isAdmin(chatId) });
+  if (!paired.ok) {
+    return paired.error;
+  }
+
+  const intro = await handleOpenClawChat({
+    chatId,
+    text: `Acknowledge that this Telegram chat is now paired to device ${parsed.deviceId} and summarize what the assistant can do for that device.`,
+    mode: 'telegram_start_pair'
+  });
+
+  return [`Device paired: ${parsed.deviceId}`, intro].join('\n\n');
 }
 
 async function handleRun(chatId, text) {
@@ -280,16 +445,21 @@ async function handleTelegramText({ bot, chatId, text }) {
   logTelegramEvent(chatId, trimmed);
 
   if (trimmed === '/openclaw') {
-    return bot.sendMessage(chatId, JSON.stringify(getOpenClawStatus(), null, 2));
+    return sendTelegramReply(bot, chatId, JSON.stringify(await getOpenClawStatus(), null, 2));
+  }
+
+  if (trimmed === '/start' || trimmed.startsWith('/start ')) {
+    const reply = await handleStartCommand(chatId, trimmed);
+    return sendTelegramReply(bot, chatId, reply);
   }
 
   if (trimmed.startsWith('/agent')) {
     if (!isAdmin(chatId)) {
-      return bot.sendMessage(chatId, 'Not authorized.');
+      return sendTelegramReply(bot, chatId, 'Not authorized.');
     }
 
     const reply = await replyToMasterAgent(trimmed.replace(/^\/agent\s*/, ''));
-    return bot.sendMessage(chatId, reply);
+    return sendTelegramReply(bot, chatId, reply);
   }
 
   if (trimmed.startsWith('/ask')) {
@@ -297,92 +467,124 @@ async function handleTelegramText({ bot, chatId, text }) {
       chatId,
       message: trimmed.replace(/^\/ask\s*/, '')
     });
-    return bot.sendMessage(chatId, reply);
+    return sendTelegramReply(bot, chatId, reply);
   }
 
   if (trimmed.startsWith('/pair')) {
     const deviceId = trimmed.split(/\s+/)[1];
     if (!deviceId) {
-      return bot.sendMessage(chatId, 'Usage: /pair DEVICE_ID');
+      return sendTelegramReply(bot, chatId, 'Usage: /pair DEVICE_ID');
     }
 
     const paired = pairDevice(deviceId, chatId, { force: isAdmin(chatId) });
     if (!paired.ok) {
-      return bot.sendMessage(chatId, paired.error);
+      return sendTelegramReply(bot, chatId, paired.error);
     }
 
-    return bot.sendMessage(chatId, `Device paired:\n${paired.device.deviceId}`);
+    return sendTelegramReply(bot, chatId, `Device paired:\n${paired.device.deviceId}`);
   }
 
   if (trimmed.startsWith('/run')) {
-    return bot.sendMessage(chatId, await handleRun(chatId, trimmed));
+    return sendTelegramReply(bot, chatId, await handleRun(chatId, trimmed));
   }
 
   if (trimmed === '/devices') {
     if (!isAdmin(chatId)) {
-      return bot.sendMessage(chatId, 'Not authorized.');
+      return sendTelegramReply(bot, chatId, 'Not authorized.');
     }
 
-    return bot.sendMessage(chatId, formatDeviceList(getAllDeviceStatuses()));
+    return sendTelegramReply(bot, chatId, formatDeviceList(getAllDeviceStatuses()));
   }
 
   if (trimmed.startsWith('/status')) {
     if (!isAdmin(chatId)) {
-      return bot.sendMessage(chatId, 'Not authorized.');
+      return sendTelegramReply(bot, chatId, 'Not authorized.');
     }
 
     const deviceId = trimmed.split(/\s+/)[1];
     if (!deviceId) {
-      return bot.sendMessage(chatId, 'Usage: /status DEVICE_ID');
+      return sendTelegramReply(bot, chatId, 'Usage: /status DEVICE_ID');
     }
 
-    return bot.sendMessage(chatId, formatDevice(getDeviceStatus(deviceId)));
+    return sendTelegramReply(bot, chatId, formatDevice(getDeviceStatus(deviceId)));
   }
 
   if (trimmed === '/reset') {
     resetSession(chatId);
-    return bot.sendMessage(chatId, 'Session reset.');
+    resetOpenClawSession(chatId);
+    return sendTelegramReply(bot, chatId, 'Session reset.');
+  }
+
+  const session = getSession(chatId);
+  if (session.flow === 'profile_intake') {
+    const result = saveProfileAnswer(chatId, trimmed);
+    if (result.nextQuestion) {
+      return sendTelegramReply(bot, chatId, result.nextQuestion.prompt);
+    }
+
+    session.flow = null;
+    session.step = null;
+    return sendTelegramReply(bot, chatId, buildProfileCompleteMessage(result.profile));
   }
 
   const sessionReply = await handleSession(chatId, trimmed);
   if (sessionReply) {
-    return bot.sendMessage(chatId, sessionReply);
+    return sendTelegramReply(bot, chatId, sessionReply);
   }
 
   if (getSession(chatId).step && tooManyRetries(chatId)) {
     resetSession(chatId);
-    return bot.sendMessage(chatId, 'Session reset.');
+    resetOpenClawSession(chatId);
+    return sendTelegramReply(bot, chatId, 'Session reset.');
   }
 
+  if (!trimmed.startsWith('/')) {
+    console.log(`telegram chat=${chatId} route=openclaw_default`);
+    const reply = await handleOpenClawChat({
+      chatId,
+      text: trimmed
+    });
+    return sendTelegramReply(bot, chatId, reply);
+  }
+
+  console.log(`telegram chat=${chatId} route=legacy_router_fallback`);
   const decision = routeMessage(trimmed);
 
   if (decision.action === 'onboarding_start') {
-    return bot.sendMessage(chatId, startOnboarding(chatId));
+    return sendTelegramReply(bot, chatId, startOnboarding(chatId));
   }
 
   if (decision.action === 'quote') {
-    return bot.sendMessage(chatId, startQuote(chatId));
+    return sendTelegramReply(bot, chatId, startQuote(chatId));
   }
 
   if (decision.action === 'promo') {
-    return bot.sendMessage(chatId, startPromo(chatId));
+    return sendTelegramReply(bot, chatId, startPromo(chatId));
   }
 
   if (decision.action === 'calendar') {
-    return bot.sendMessage(chatId, calendarMock());
+    return sendTelegramReply(bot, chatId, calendarMock());
   }
 
   if (decision.action === 'local_write') {
     const result = writeApprovedFile('sample.txt', trimmed);
-    return bot.sendMessage(chatId, result.message);
+    return sendTelegramReply(bot, chatId, result.message);
   }
 
-  return bot.sendMessage(chatId, 'Unknown request');
+  return sendTelegramReply(bot, chatId, `Unsupported command: ${trimmed}`);
 }
 
 function startTelegram() {
+  if (pollingStarted && botInstance && botMode === 'polling') {
+    return botInstance;
+  }
+
   acquirePollingLock();
-  const bot = getBot();
+  const bot = getBot({ polling: true });
+  if (pollingStarted) {
+    return bot;
+  }
+
   console.log('Telegram polling started');
 
   bot.on('message', async (msg) => {
@@ -396,7 +598,11 @@ function startTelegram() {
       });
     } catch (error) {
       console.error(error.message);
-      await bot.sendMessage(chatId, 'Internal error');
+      try {
+        await sendTelegramReply(bot, chatId, 'Internal error');
+      } catch (sendError) {
+        console.error(sendError.message);
+      }
     }
   });
 
@@ -404,12 +610,14 @@ function startTelegram() {
     console.error(`Telegram polling error: ${error.message}`);
   });
 
+  pollingStarted = true;
   return bot;
 }
 
 module.exports = {
   startTelegram,
   getBot,
+  getTelegramBotIdentity,
   handleTelegramText,
   parseRunCommand,
   isAdmin

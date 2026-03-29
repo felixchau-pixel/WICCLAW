@@ -9,6 +9,16 @@ SERVICE_USER="${SUDO_USER:-${SCRIPT_OWNER:-wicma}}"
 
 mkdir -p "$SCRIPT_DIR/approved" "$SCRIPT_DIR/runtime/sync" "$SCRIPT_DIR/runtime/state"
 
+repair_runtime_ownership() {
+  if [[ "$(id -u)" -ne 0 || "$SERVICE_USER" == "root" ]]; then
+    return 0
+  fi
+
+  chown -R "$SERVICE_USER:$SERVICE_USER" \
+    "$SCRIPT_DIR/approved" \
+    "$SCRIPT_DIR/runtime"
+}
+
 resolve_node_bin() {
   if [[ -n "${NODE_BIN:-}" && -x "${NODE_BIN}" ]]; then
     printf '%s\n' "$NODE_BIN"
@@ -72,6 +82,7 @@ if [[ "${1:-}" == "--run" ]]; then
     exit 127
   }
   cd "$SCRIPT_DIR"
+  repair_runtime_ownership
   if [[ "$(id -u)" -eq 0 && "$SERVICE_USER" != "root" ]]; then
     if command -v runuser >/dev/null 2>&1; then
       exec runuser -u "$SERVICE_USER" -- "$NODE_EXECUTABLE" mini-agent.js

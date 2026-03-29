@@ -5,7 +5,8 @@ function buildSession() {
     step: null,
     flow: null,
     data: {},
-    retries: 0
+    retries: 0,
+    openclawRevision: 0
   };
 }
 
@@ -25,6 +26,18 @@ function resetSession(chatId) {
   return sessions.get(key);
 }
 
+function getOpenClawSessionId(chatId) {
+  const session = getSession(chatId);
+  const safeChatId = String(chatId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `telegram-chat-${safeChatId}-r${session.openclawRevision}`;
+}
+
+function resetOpenClawSession(chatId) {
+  const session = getSession(chatId);
+  session.openclawRevision += 1;
+  return getOpenClawSessionId(chatId);
+}
+
 function incrementRetry(chatId) {
   const session = getSession(chatId);
   session.retries += 1;
@@ -39,6 +52,8 @@ function clearRetry(chatId) {
 module.exports = {
   getSession,
   resetSession,
+  getOpenClawSessionId,
+  resetOpenClawSession,
   incrementRetry,
   clearRetry
 };

@@ -23,9 +23,9 @@ function parseDeviceId(message) {
   return match ? match[1] : '';
 }
 
-function buildSystemState() {
+async function buildSystemState() {
   const devices = getAllDeviceStatuses();
-  const openclaw = getOpenClawStatus();
+  const openclaw = await getOpenClawStatus();
   const manifest = getMasterManifest();
 
   return {
@@ -133,10 +133,10 @@ async function replyToMasterAgent(message) {
   }
 
   if (lower.includes('openclaw')) {
-    return JSON.stringify(getOpenClawStatus(), null, 2);
+    return JSON.stringify(await getOpenClawStatus(), null, 2);
   }
 
-  const state = buildSystemState();
+  const state = await buildSystemState();
   if (lower.includes('report') || lower.includes('system status') || lower === 'status' || lower.includes('report system')) {
     return buildDeterministicSystemReport(state);
   }

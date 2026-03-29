@@ -21,6 +21,7 @@ function canExecute({ chatId, device, task }) {
     case 'delete_file':
     case 'move_file':
     case 'list_files':
+    case 'summarize_file':
     case 'get_result':
     case 'exec_cmd':
       return { ok: true };

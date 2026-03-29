@@ -1,9 +1,37 @@
 #!/usr/bin/env node
 
 const path = require('path');
+const os = require('os');
 const { spawnSync } = require('child_process');
 
 const projectRoot = path.join(__dirname, '..');
+const openclawHome =
+  process.env.OPENCLAW_STATE_DIR ||
+  process.env.OPENCLAW_HOME ||
+  path.join(projectRoot, '.openclaw');
+const openclawConfigPath =
+  process.env.OPENCLAW_CONFIG_PATH ||
+  process.env.OPENCLAW_CONFIG ||
+  path.join(openclawHome, 'openclaw.json');
+const projectBinDir = path.join(projectRoot, 'bin');
+
+function findOpenClawCommand() {
+  if (process.env.OPENCLAW_BIN) {
+    return [process.env.OPENCLAW_BIN];
+  }
+
+  const localBinary = path.join(projectRoot, 'node_modules', '.bin', 'openclaw');
+  if (require('fs').existsSync(localBinary)) {
+    return [localBinary];
+  }
+
+  const localEntrypoint = path.join(projectRoot, 'node_modules', 'openclaw', 'openclaw.mjs');
+  if (require('fs').existsSync(localEntrypoint)) {
+    return [process.execPath, localEntrypoint];
+  }
+
+  return ['openclaw'];
+}
 
 function buildPrompt({ deviceId, taskId, task }) {
   const approvedFolder = process.env.APPROVED_FOLDER || path.join(projectRoot, 'local-box', 'files', 'approved');
@@ -65,25 +93,35 @@ function extractJson(text) {
 const input = parseInput();
 const prompt = buildPrompt(input);
 const command = [
-  `'${process.execPath.replace(/'/g, `'\\''`)}'`,
-  `'${path.join(__dirname, 'openclaw-master.js').replace(/'/g, `'\\''`)}'`,
+  ...findOpenClawCommand(),
   'agent',
   '--agent',
   'main',
   '--session-id',
-  `'wicclaw-task-${String(input.taskId).replace(/'/g, `'\\''`)}'`,
+  `wicclaw-task-${String(input.taskId).replace(/[^a-zA-Z0-9_-]/g, '_')}`,
   '--local',
   '--json',
   '--message',
-  `'${prompt.replace(/'/g, `'\\''`)}'`,
+  prompt,
   '--thinking',
   'minimal',
   '--timeout',
   String(Number(process.env.OPENCLAW_AGENT_TIMEOUT_SECONDS || 120))
-].join(' ');
+];
 
-const child = spawnSync('bash', ['-lc', command], {
+const child = spawnSync(command[0], command.slice(1), {
   cwd: projectRoot,
+  env: {
+    ...process.env,
+    OPENCLAW_STATE_DIR: openclawHome,
+    OPENCLAW_HOME: openclawHome,
+    OPENCLAW_CONFIG_PATH: openclawConfigPath,
+    OPENCLAW_CONFIG: openclawConfigPath,
+    OPENCLAW_SKILLS_PATH: path.join(projectRoot, 'skills'),
+    OPENCLAW_MEMORY_PATH: path.join(openclawHome, 'memory'),
+    HOME: process.env.HOME || os.homedir(),
+    PATH: `${projectBinDir}:${process.env.PATH || ''}`
+  },
   encoding: 'utf8',
   timeout: Number(process.env.OPENCLAW_TIMEOUT_MS || 120000)
 });

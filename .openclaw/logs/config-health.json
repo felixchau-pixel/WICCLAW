@@ -2,13 +2,13 @@
   "entries": {
     "/home/wicma/wicclaw/.openclaw/openclaw.json": {
       "lastKnownGood": {
-        "hash": "96cb38d5227195d9334bc24f0e23cea15c1394aa1d8fbac7616d66ce64036b82",
-        "bytes": 1087,
-        "mtimeMs": 1774648942339.1814,
-        "ctimeMs": 1774648942347.5984,
+        "hash": "10d3b69e2ec2e9f4fb64083c47d4414db6b13c05e322d8133e661fb5c000a33d",
+        "bytes": 1384,
+        "mtimeMs": 1774746227338.3762,
+        "ctimeMs": 1774746227338.3762,
         "hasMeta": true,
         "gatewayMode": "local",
-        "observedAt": "2026-03-27T22:02:23.552Z"
+        "observedAt": "2026-03-29T01:03:47.359Z"
       },
       "lastObservedSuspiciousSignature": null
     }
