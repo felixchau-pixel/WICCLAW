@@ -57,6 +57,11 @@ function ensureConfig() {
         }
       ]
     },
+    channels: {
+      telegram: {
+        enabled: false
+      }
+    },
     gateway: {
       mode: 'local',
       bind: 'custom',
