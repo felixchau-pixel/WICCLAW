@@ -6,6 +6,8 @@ cd "$ROOT_DIR"
 LOCK_FILE="$ROOT_DIR/.master-runtime.lock"
 export PATH="$ROOT_DIR/bin:$PATH"
 
+unset DISABLE_TELEGRAM_POLLING
+
 set -a
 . "$ROOT_DIR/.env"
 set +a
