@@ -40,6 +40,7 @@ let botMode = 'idle';
 let pollingStarted = false;
 const telegramLockPath = path.join(__dirname, '..', '.telegram-polling.lock');
 const TELEGRAM_MESSAGE_LIMIT = 3500;
+const OPENCLAW_CHAT_UNAVAILABLE_MESSAGE = 'Assistant is temporarily unavailable right now.';
 
 function isLivePid(pid) {
   if (!pid) {
@@ -305,18 +306,20 @@ async function handleOpenClawChat({ chatId, text, mode = 'telegram_chat' }) {
   });
 
   if (!result.ok) {
+    console.error(`telegram chat=${chatId} openclaw_error=${JSON.stringify(result.error || 'unknown error')}`);
     if (isConnectIntent(text)) {
       return buildConnectReply(chatId, text);
     }
-    return `OpenClaw chat unavailable: ${result.error || 'unknown error'}`;
+    return OPENCLAW_CHAT_UNAVAILABLE_MESSAGE;
   }
 
   const reply = String(result.reply || '').trim();
   if (!reply) {
+    console.error(`telegram chat=${chatId} openclaw_error="empty reply"`);
     if (isConnectIntent(text)) {
       return buildConnectReply(chatId, text);
     }
-    return 'OpenClaw chat unavailable: empty reply';
+    return OPENCLAW_CHAT_UNAVAILABLE_MESSAGE;
   }
 
   return reply;
