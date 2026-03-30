@@ -16,7 +16,7 @@ mkdir -p "$ROOT_DIR/.openclaw-bridge/requests" "$ROOT_DIR/.openclaw-bridge/respo
 
 if command -v flock >/dev/null 2>&1; then
   if flock -n "$LOCK_FILE" true; then
-    exec flock "$LOCK_FILE" bash -lc "cd '$ROOT_DIR'; export PATH='$ROOT_DIR/bin':\"\$PATH\"; node scripts/openclaw-master.js > '$ROOT_DIR/.openclaw-gateway.log' 2>&1 & node scripts/openclaw-bridge.js > '$ROOT_DIR/.openclaw-bridge.log' 2>&1 & exec node server.js"
+    exec flock --close "$LOCK_FILE" bash -lc "cd '$ROOT_DIR'; export PATH='$ROOT_DIR/bin':\"\$PATH\"; node scripts/openclaw-master.js > '$ROOT_DIR/.openclaw-gateway.log' 2>&1 & node scripts/openclaw-bridge.js > '$ROOT_DIR/.openclaw-bridge.log' 2>&1 & exec node server.js"
   fi
 
   echo "Master already running or lock held: $LOCK_FILE" >&2
