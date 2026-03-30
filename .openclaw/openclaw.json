@@ -1,7 +1,7 @@
 {
   "meta": {
     "lastTouchedVersion": "2026.3.24",
-    "lastTouchedAt": "2026-03-29T01:03:47.340Z"
+    "lastTouchedAt": "2026-03-29T22:41:09.609Z"
   },
   "logging": {
     "level": "info",
@@ -45,7 +45,7 @@
   },
   "channels": {
     "telegram": {
-      "enabled": true,
+      "enabled": false,
       "dmPolicy": "pairing",
       "groupPolicy": "allowlist",
       "streaming": "partial"
