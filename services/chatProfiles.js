@@ -120,6 +120,7 @@ function summarizeProfile(profile) {
 module.exports = {
   PROFILE_QUESTIONS,
   getProfile,
+  setProfile,
   getOrCreateProfile,
   isProfileComplete,
   getNextProfileQuestion,

@@ -1,13 +1,9 @@
 const { getSession, clearRetry } = require('../core/session');
 const { askClaude, hasAnthropic } = require('../services/anthropic');
+const { getProfile } = require('../services/chatProfiles');
 
 function startPromo(chatId) {
   const session = getSession(chatId);
-
-  if (!session.data.businessType) {
-    return 'Setup required. Type /start first.';
-  }
-
   session.flow = 'promo';
   session.step = 'promo_goal';
   clearRetry(chatId);
@@ -40,32 +36,41 @@ async function handlePromo(chatId, text) {
   session.step = null;
   clearRetry(chatId);
 
-  const basicReply = [
-    'Promotion ready:',
-    `Goal: ${session.data.promoGoal}`,
-    `Offer: ${session.data.promoOffer}`,
-    `Timing: ${session.data.promoTime}`
+  const goal = session.data.promoGoal;
+  const offer = session.data.promoOffer;
+  const timing = session.data.promoTime;
+  const profile = getProfile(chatId);
+  const businessType = profile?.responses?.businessType || session.data.businessType || '';
+
+  if (hasAnthropic()) {
+    try {
+      const aiDraft = await askClaude({
+        system: 'Write short, practical promotion copy and rollout advice in plain text. Keep it ready to use.',
+        user: [
+          businessType ? `Business type: ${businessType}` : '',
+          `Goal: ${goal}`,
+          `Offer: ${offer}`,
+          `Timing: ${timing}`
+        ].filter(Boolean).join('\n')
+      });
+
+      if (aiDraft) {
+        return `Here's your promo plan:\n\n${aiDraft}`;
+      }
+    } catch (err) {
+      console.error(`promo ai_error=${err.message}`);
+    }
+  }
+
+  return [
+    "Here's your promo plan:",
+    '',
+    `Goal: ${goal}`,
+    `Offer: ${offer}`,
+    `Timing: ${timing}`,
+    '',
+    'You can use this as a starting point for your campaign.'
   ].join('\n');
-
-  if (!hasAnthropic()) {
-    return `${basicReply}\n\nAI unavailable.`;
-  }
-
-  try {
-    const aiDraft = await askClaude({
-      system: 'Give short practical promotion copy and rollout advice in plain text.',
-      user: [
-        `Business type: ${session.data.businessType}`,
-        `Goal: ${session.data.promoGoal}`,
-        `Offer: ${session.data.promoOffer}`,
-        `Timing: ${session.data.promoTime}`
-      ].join('\n')
-    });
-
-    return `${basicReply}\n\nAI:\n${aiDraft}`;
-  } catch {
-    return `${basicReply}\n\nAI failed.`;
-  }
 }
 
 module.exports = {

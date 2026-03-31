@@ -1,17 +1,13 @@
 const { getSession, clearRetry } = require('../core/session');
 const { askClaude, hasAnthropic } = require('../services/anthropic');
+const { getProfile } = require('../services/chatProfiles');
 
 function startQuote(chatId) {
   const session = getSession(chatId);
-
-  if (!session.data.businessType) {
-    return 'Setup required. Type /start first.';
-  }
-
   session.flow = 'quote';
   session.step = 'quote_service';
   clearRetry(chatId);
-  return 'What service does the customer need?';
+  return 'What service does the customer need a quote for?';
 }
 
 async function handleQuote(chatId, text) {
@@ -33,25 +29,38 @@ async function handleQuote(chatId, text) {
   session.step = null;
   clearRetry(chatId);
 
-  const businessType = session.data.businessType;
   const service = session.data.quoteService;
   const price = session.data.quotePrice;
-  const basicReply = `Quote ready:\nService: ${service}\nPrice: ${price}`;
+  const profile = getProfile(chatId);
+  const businessType = profile?.responses?.businessType || session.data.businessType || '';
 
-  if (!hasAnthropic()) {
-    return `${basicReply}\n\nAI unavailable. Add ANTHROPIC_API_KEY.`;
+  if (hasAnthropic()) {
+    try {
+      const aiDraft = await askClaude({
+        system: 'Write a concise, friendly, customer-ready quote in plain text. No headers or labels, just the quote text ready to send.',
+        user: [
+          businessType ? `Business type: ${businessType}` : '',
+          `Service: ${service}`,
+          `Price: ${price}`
+        ].filter(Boolean).join('\n')
+      });
+
+      if (aiDraft) {
+        return `Here's your quote:\n\n${aiDraft}`;
+      }
+    } catch (err) {
+      console.error(`quote ai_error=${err.message}`);
+    }
   }
 
-  try {
-    const aiDraft = await askClaude({
-      system: 'Write a concise customer-ready quote in plain text.',
-      user: `Business type: ${businessType}\nService: ${service}\nPrice: ${price}`
-    });
-
-    return `${basicReply}\n\nAI:\n${aiDraft}`;
-  } catch {
-    return `${basicReply}\n\nAI failed.`;
-  }
+  return [
+    "Here's your quote:",
+    '',
+    `Service: ${service}`,
+    `Price: ${price}`,
+    '',
+    'You can copy this and send it to your customer.'
+  ].join('\n');
 }
 
 module.exports = {

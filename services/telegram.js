@@ -26,8 +26,9 @@ const { dispatchTask } = require('./taskDispatch');
 const { getOpenClawStatus, converseWithOpenClaw } = require('./openclawAdapter');
 const { replyToMasterAgent } = require('./masterAgent');
 const { replyToAssistant } = require('./assistantAgent');
+const { askClaude, hasAnthropic } = require('./anthropic');
 const { parsePairingPayload } = require('./onboardingLink');
-const { getProfile, saveProfileAnswer, summarizeProfile } = require('./chatProfiles');
+const { getProfile, getOrCreateProfile, isProfileComplete, saveProfileAnswer, summarizeProfile } = require('./chatProfiles');
 const { buildConnectLink, getChatConnectState } = require('./googleConnect');
 const { startOnboarding, handleOnboarding } = require('../skills/onboarding');
 const { startQuote, handleQuote } = require('../skills/quote');
@@ -40,7 +41,6 @@ let botMode = 'idle';
 let pollingStarted = false;
 const telegramLockPath = path.join(__dirname, '..', '.telegram-polling.lock');
 const TELEGRAM_MESSAGE_LIMIT = 3500;
-const OPENCLAW_CHAT_UNAVAILABLE_MESSAGE = 'Assistant is temporarily unavailable right now.';
 
 function isLivePid(pid) {
   if (!pid) {
@@ -237,6 +237,14 @@ function parseRunCommand(raw) {
     return { type: 'list_files', payload: {} };
   }
 
+  if (trimmed === 'ls') {
+    return { type: 'list_files', payload: {} };
+  }
+
+  if (trimmed === 'pwd') {
+    return { type: 'pwd', payload: {} };
+  }
+
   if (trimmed.startsWith('summarize ')) {
     return {
       type: 'summarize_file',
@@ -296,33 +304,75 @@ async function handleOpenClawChat({ chatId, text, mode = 'telegram_chat' }) {
         'If the user wants to connect Google, calendar, or email, include the exact bound link above in your reply.'
       ].join('\n')
     : text;
-  const result = await converseWithOpenClaw({
-    mode,
-    chatId: String(chatId),
-    sessionId,
-    message: prompt,
-    profile,
-    connectState
-  });
 
-  if (!result.ok) {
-    console.error(`telegram chat=${chatId} openclaw_error=${JSON.stringify(result.error || 'unknown error')}`);
-    if (isConnectIntent(text)) {
-      return buildConnectReply(chatId, text);
-    }
-    return OPENCLAW_CHAT_UNAVAILABLE_MESSAGE;
+  const chatTimeoutMs = Number(process.env.OPENCLAW_CHAT_TIMEOUT_MS || 15000);
+  let result;
+  try {
+    result = await Promise.race([
+      converseWithOpenClaw({
+        mode,
+        chatId: String(chatId),
+        sessionId,
+        message: prompt,
+        profile,
+        connectState
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('OpenClaw chat timeout')), chatTimeoutMs)
+      )
+    ]);
+  } catch (err) {
+    console.error(`telegram chat=${chatId} openclaw_error=${err.message}`);
+    result = { ok: false, error: err.message };
   }
 
-  const reply = String(result.reply || '').trim();
-  if (!reply) {
+  if (result.ok) {
+    const reply = String(result.reply || '').trim();
+    if (reply) {
+      return reply;
+    }
     console.error(`telegram chat=${chatId} openclaw_error="empty reply"`);
-    if (isConnectIntent(text)) {
-      return buildConnectReply(chatId, text);
-    }
-    return OPENCLAW_CHAT_UNAVAILABLE_MESSAGE;
   }
 
-  return reply;
+  if (isConnectIntent(text)) {
+    return buildConnectReply(chatId, text);
+  }
+
+  console.log(`telegram chat=${chatId} route=anthropic_fallback`);
+  if (hasAnthropic()) {
+    try {
+      const userProfile = getProfile(chatId);
+      const userName = userProfile?.responses?.userName || '';
+      const assistantName = userProfile?.responses?.assistantName || 'your assistant';
+      const style = userProfile?.responses?.responseStyle || 'concise and helpful';
+
+      const reply = await askClaude({
+        system: [
+          `You are ${assistantName}, a Telegram assistant.`,
+          userName ? `The user's name is ${userName}.` : '',
+          `Respond in a ${style} style.`,
+          'Be conversational and helpful.',
+          'Do not claim actions were executed unless you know they were.',
+          'If the user needs quotes, promos, scheduling, or file tasks, guide them naturally.',
+          'Never mention internal system names, provider failures, or technical errors to the user.'
+        ].filter(Boolean).join(' '),
+        user: prompt,
+        maxTokens: 1024
+      });
+      if (reply) {
+        return reply;
+      }
+    } catch (err) {
+      console.error(`telegram chat=${chatId} anthropic_fallback_error=${err.message}`);
+    }
+  }
+
+  const fallbackProfile = getProfile(chatId);
+  const fallbackName = fallbackProfile?.responses?.userName;
+  if (fallbackName) {
+    return `Hey ${fallbackName}, I'm having a moment. Try again in a bit, or just tell me what you need and I'll do my best.`;
+  }
+  return "I'm having a moment. Try again in a bit, or just tell me what you need and I'll do my best.";
 }
 
 function isConnectIntent(text) {
@@ -354,43 +404,46 @@ function buildConnectReply(chatId, text) {
 }
 
 function buildProfileCompleteMessage(profile) {
-  const summary = summarizeProfile(profile);
-  return [
-    'Profile saved.',
-    `I will call you: ${summary.userName || '-'}`,
-    `You call me: ${summary.assistantName || '-'}`,
-    `Business: ${summary.businessName || '-'} (${summary.businessType || '-'})`
-  ].join('\n');
+  const userName = profile?.responses?.userName || '';
+  const assistantName = profile?.responses?.assistantName || 'your assistant';
+  return `Perfect, ${userName}. I'm ${assistantName} and I've got the basics saved. What do you want to work on?`;
+}
+
+function buildReturningGreeting(profile) {
+  const userName = profile?.responses?.userName || '';
+  const assistantName = profile?.responses?.assistantName || '';
+  if (userName && assistantName) {
+    return `Hey ${userName}, it's ${assistantName}. What can I help you with?`;
+  }
+  if (userName) {
+    return `Hey ${userName}. What can I help you with?`;
+  }
+  return 'Hey, welcome back. What can I help you with?';
 }
 
 async function handleStartCommand(chatId, text) {
   const payload = String(text || '').replace(/^\/start\s*/, '').trim();
 
-  if (!payload) {
-    return handleOpenClawChat({
-      chatId,
-      text: 'Introduce yourself as the live WicClaw Telegram assistant and summarize what you can do in this chat.',
-      mode: 'telegram_start'
-    });
+  if (payload) {
+    const parsed = parsePairingPayload(payload);
+    if (!parsed.ok) {
+      return parsed.error;
+    }
+
+    const paired = pairDevice(parsed.deviceId, chatId, { force: isAdmin(chatId) });
+    if (!paired.ok) {
+      return paired.error;
+    }
+
+    return `Device paired: ${parsed.deviceId}\nI'm ready to help with this device. What do you need?`;
   }
 
-  const parsed = parsePairingPayload(payload);
-  if (!parsed.ok) {
-    return parsed.error;
+  const profile = getProfile(chatId);
+  if (profile && isProfileComplete(profile)) {
+    return buildReturningGreeting(profile);
   }
 
-  const paired = pairDevice(parsed.deviceId, chatId, { force: isAdmin(chatId) });
-  if (!paired.ok) {
-    return paired.error;
-  }
-
-  const intro = await handleOpenClawChat({
-    chatId,
-    text: `Acknowledge that this Telegram chat is now paired to device ${parsed.deviceId} and summarize what the assistant can do for that device.`,
-    mode: 'telegram_start_pair'
-  });
-
-  return [`Device paired: ${parsed.deviceId}`, intro].join('\n\n');
+  return startOnboarding(chatId);
 }
 
 async function handleRun(chatId, text) {
@@ -542,6 +595,12 @@ async function handleTelegramText({ bot, chatId, text }) {
   }
 
   if (!trimmed.startsWith('/')) {
+    const profile = getProfile(chatId);
+    if (!profile || !profile.responses?.userName) {
+      console.log(`telegram chat=${chatId} route=onboarding_first_contact`);
+      return sendTelegramReply(bot, chatId, startOnboarding(chatId));
+    }
+
     console.log(`telegram chat=${chatId} route=openclaw_default`);
     const reply = await handleOpenClawChat({
       chatId,
@@ -600,9 +659,14 @@ function startTelegram() {
         text: msg.text
       });
     } catch (error) {
-      console.error(error.message);
+      console.error(`telegram chat=${chatId} unhandled_error=${error.message}`);
       try {
-        await sendTelegramReply(bot, chatId, 'Internal error');
+        const errProfile = getProfile(chatId);
+        const errName = errProfile?.responses?.userName;
+        const errMsg = errName
+          ? `Sorry ${errName}, something went wrong on my end. Try again?`
+          : 'Sorry, something went wrong on my end. Try again?';
+        await sendTelegramReply(bot, chatId, errMsg);
       } catch (sendError) {
         console.error(sendError.message);
       }

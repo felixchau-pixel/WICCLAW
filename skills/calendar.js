@@ -1,13 +1,12 @@
 function calendarMock() {
   return [
-    'Calendar workflow started.',
+    "Calendar isn't connected yet, but here's what I can help with once it is:",
     '',
-    'Mode: mock',
-    'Automation: disabled',
-    'Output:',
-    '- Review bookings manually',
-    '- Confirm the next available slot with the customer',
-    '- Record the final appointment in your real calendar system'
+    '- Check your upcoming appointments',
+    '- Find available slots for customers',
+    '- Set reminders for bookings',
+    '',
+    'For now, you can tell me about appointments and I can help you keep track.'
   ].join('\n');
 }
 

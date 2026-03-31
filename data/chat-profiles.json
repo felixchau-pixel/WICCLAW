@@ -30,14 +30,15 @@
     "8698063852": {
       "chatId": "8698063852",
       "createdAt": "2026-03-29T01:16:59.134Z",
-      "updatedAt": "2026-03-29T01:16:59.138Z",
+      "updatedAt": "2026-03-31T09:05:52.932Z",
       "responses": {
-        "userName": "What can you do for me",
-        "assistantName": "Can you help me with my invoice",
-        "businessName": "Can you control my computer and work for me"
+        "userName": "Felix",
+        "assistantName": "Claw",
+        "responseStyle": "short and direct"
       },
-      "complete": false,
-      "intakeStartedAt": "2026-03-29T01:16:59.134Z"
+      "complete": true,
+      "intakeStartedAt": "2026-03-29T01:16:59.134Z",
+      "onboardedAt": "2026-03-31T09:05:52.932Z"
     }
   }
 }
