@@ -30,7 +30,7 @@
     "8698063852": {
       "chatId": "8698063852",
       "createdAt": "2026-03-29T01:16:59.134Z",
-      "updatedAt": "2026-03-31T09:05:52.932Z",
+      "updatedAt": "2026-04-02T00:13:24.685Z",
       "responses": {
         "userName": "Felix",
         "assistantName": "Claw",
@@ -38,7 +38,7 @@
       },
       "complete": true,
       "intakeStartedAt": "2026-03-29T01:16:59.134Z",
-      "onboardedAt": "2026-03-31T09:05:52.932Z"
+      "onboardedAt": "2026-04-02T00:13:24.685Z"
     }
   }
 }

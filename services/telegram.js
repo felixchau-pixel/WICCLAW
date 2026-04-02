@@ -430,12 +430,18 @@ async function handleStartCommand(chatId, text) {
       return parsed.error;
     }
 
-    const paired = pairDevice(parsed.deviceId, chatId, { force: isAdmin(chatId) });
+    const canForce = isAdmin(chatId) || parsed.mode === 'signed';
+    const paired = pairDevice(parsed.deviceId, chatId, { force: canForce });
     if (!paired.ok) {
       return paired.error;
     }
 
-    return `Device paired: ${parsed.deviceId}\nI'm ready to help with this device. What do you need?`;
+    const profile = getProfile(chatId);
+    if (profile && profile.responses?.userName) {
+      return `Device paired: ${parsed.deviceId}\nHey ${profile.responses.userName}, I'm ready to help with this device.`;
+    }
+
+    return startOnboarding(chatId);
   }
 
   const profile = getProfile(chatId);
