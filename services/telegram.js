@@ -119,7 +119,10 @@ function getBot(options = {}) {
     botInstance = null;
   }
 
-  botInstance = new TelegramBot(token, { polling });
+  const pollingOpts = polling
+    ? { polling: { interval: 100, params: { timeout: 30 } } }
+    : { polling: false };
+  botInstance = new TelegramBot(token, pollingOpts);
   botMode = polling ? 'polling' : 'idle';
   return botInstance;
 }
@@ -642,49 +645,81 @@ async function handleTelegramText({ bot, chatId, text }) {
   return sendTelegramReply(bot, chatId, `Unsupported command: ${trimmed}`);
 }
 
+async function claimPollingSlot() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token || isUnsetOrPlaceholder(token)) {
+    return;
+  }
+
+  const https = require('https');
+  function tgPost(method) {
+    return new Promise((resolve) => {
+      const req = https.request(`https://api.telegram.org/bot${token}/${method}`, { method: 'POST' }, (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => resolve(body));
+      });
+      req.on('error', () => resolve(''));
+      req.end();
+    });
+  }
+
+  try {
+    await tgPost('setWebhook?url=https://example.com:443/claim-slot');
+    await new Promise((r) => setTimeout(r, 3000));
+    await tgPost('deleteWebhook');
+    await new Promise((r) => setTimeout(r, 500));
+  } catch {}
+}
+
 function startTelegram() {
   if (pollingStarted && botInstance && botMode === 'polling') {
     return botInstance;
   }
 
   acquirePollingLock();
-  const bot = getBot({ polling: true });
-  if (pollingStarted) {
-    return bot;
-  }
 
-  console.log('Telegram polling started');
-
-  bot.on('message', async (msg) => {
-    const chatId = msg.chat.id;
-
-    try {
-      await handleTelegramText({
-        bot,
-        chatId,
-        text: msg.text
-      });
-    } catch (error) {
-      console.error(`telegram chat=${chatId} unhandled_error=${error.message}`);
-      try {
-        const errProfile = getProfile(chatId);
-        const errName = errProfile?.responses?.userName;
-        const errMsg = errName
-          ? `Sorry ${errName}, something went wrong on my end. Try again?`
-          : 'Sorry, something went wrong on my end. Try again?';
-        await sendTelegramReply(bot, chatId, errMsg);
-      } catch (sendError) {
-        console.error(sendError.message);
-      }
+  claimPollingSlot().then(() => {
+    const bot = getBot({ polling: true });
+    if (pollingStarted) {
+      return;
     }
-  });
 
-  bot.on('polling_error', (error) => {
-    console.error(`Telegram polling error: ${error.message}`);
-  });
+    console.log('Telegram polling started');
 
-  pollingStarted = true;
-  return bot;
+    bot.on('message', async (msg) => {
+      const chatId = msg.chat.id;
+
+      try {
+        await handleTelegramText({
+          bot,
+          chatId,
+          text: msg.text
+        });
+      } catch (error) {
+        console.error(`telegram chat=${chatId} unhandled_error=${error.message}`);
+        try {
+          const errProfile = getProfile(chatId);
+          const errName = errProfile?.responses?.userName;
+          const errMsg = errName
+            ? `Sorry ${errName}, something went wrong on my end. Try again?`
+            : 'Sorry, something went wrong on my end. Try again?';
+          await sendTelegramReply(bot, chatId, errMsg);
+        } catch (sendError) {
+          console.error(sendError.message);
+        }
+      }
+    });
+
+    bot.on('polling_error', (error) => {
+      if (error.message && error.message.includes('409')) {
+        return;
+      }
+      console.error(`Telegram polling error: ${error.message}`);
+    });
+
+    pollingStarted = true;
+  });
 }
 
 module.exports = {
