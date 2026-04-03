@@ -1,0 +1,46 @@
+{
+  "logging": {
+    "level": "info",
+    "file": "/home/wicma/wicclaw/.openclaw/openclaw.log"
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/home/wicma/wicclaw",
+      "heartbeat": {
+        "every": "0m"
+      },
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-5"
+      },
+      "models": {
+        "anthropic/claude-sonnet-4-5": {}
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "skills": [
+          "weather",
+          "healthcheck",
+          "node-connect",
+          "gog",
+          "himalaya",
+          "word-docx",
+          "excel-xlsx",
+          "productivity"
+        ]
+      }
+    ]
+  },
+  "gateway": {
+    "mode": "local",
+    "bind": "custom",
+    "customBindHost": "127.0.0.1",
+    "auth": {
+      "mode": "token",
+      "token": "${MASTER_API_TOKEN}"
+    },
+    "port": 18789
+  }
+}

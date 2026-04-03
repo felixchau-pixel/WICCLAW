@@ -53,18 +53,8 @@ function getMiniConfig() {
   } catch {}
 
   return {
-    cloudUrl:
-      fs.existsSync(path.join(__dirname, '..', 'server.js')) &&
-      fs.existsSync(path.join(__dirname, '..', '.env')) &&
-      resolvedCloudUrl !== defaultCloudUrl
-        ? defaultCloudUrl
-        : resolvedCloudUrl,
-    fallbackCloudUrl:
-      fs.existsSync(path.join(__dirname, '..', 'server.js')) &&
-      fs.existsSync(path.join(__dirname, '..', '.env')) &&
-      resolvedCloudUrl !== defaultCloudUrl
-        ? resolvedCloudUrl
-        : '',
+    cloudUrl: resolvedCloudUrl,
+    fallbackCloudUrl: '',
     deviceId: process.env.DEVICE_ID,
     deviceSecret: process.env.DEVICE_SECRET,
     masterApiToken: process.env.MASTER_API_TOKEN,
@@ -233,7 +223,12 @@ function createMiniAgent(options = {}) {
   }
 
   async function pollTask() {
-    const response = await requestJson(`/api/task/${config.deviceId}`, { method: 'GET' });
+    const response = await requestJson(`/api/task/${config.deviceId}`, {
+      method: 'GET',
+      headers: {
+        'X-Device-Claim': 'true'
+      }
+    });
     return response.task || null;
   }
 

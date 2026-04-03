@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "available": true,
+  "reply": "I can help you create a quote. What's it for?",
+  "proposedActions": [
+    {
+      "deviceId": "mini_001",
+      "task": {
+        "type": "run_workflow",
+        "payload": {
+          "workflow": "quote"
+        }
+      },
+      "why": "Run quote workflow to guide user through quote generation"
+    }
+  ],
+  "blockers": []
+}

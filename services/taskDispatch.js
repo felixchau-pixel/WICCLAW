@@ -64,11 +64,9 @@ async function dispatchTask({ deviceId, task, source = 'telegram' }) {
       }
 
       if (openclawResult.available) {
-        saveTaskResult(deviceId, taskId, {
-          ok: false,
-          mode: 'openclaw_attempt',
-          error: openclawResult.error || 'OpenClaw execution failed'
-        });
+        // Fall through to the device queue without persisting a synthetic result
+        // for the same task id. The queued device result should be the first
+        // visible result for fallback execution.
       }
     } catch {}
   }

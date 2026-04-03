@@ -89,6 +89,9 @@ function executeTask(task, options = {}) {
       return { ok: true, files };
     }
 
+    case 'pwd':
+      return { ok: true, cwd: approvedFolder };
+
     case 'summarize_file': {
       const targetPath = resolveApprovedPath(task.payload.filename, approvedFolder);
       return summarizeApprovedFile(targetPath);

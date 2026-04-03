@@ -5,15 +5,15 @@
   },
   "agents": {
     "defaults": {
+      "workspace": "/home/wicma/wicclaw",
+      "heartbeat": {
+        "every": "0m"
+      },
       "model": {
         "primary": "anthropic/claude-sonnet-4-5"
       },
       "models": {
         "anthropic/claude-sonnet-4-5": {}
-      },
-      "workspace": "/home/wicma/wicclaw",
-      "heartbeat": {
-        "every": "0m"
       }
     },
     "list": [
@@ -33,32 +33,19 @@
       }
     ]
   },
-  "commands": {
-    "native": "auto",
-    "nativeSkills": "auto",
-    "restart": true,
-    "ownerDisplay": "raw"
-  },
   "channels": {
     "telegram": {
-      "enabled": true,
-      "dmPolicy": "pairing",
-      "groupPolicy": "allowlist",
-      "streaming": "partial"
+      "enabled": false
     }
   },
   "gateway": {
-    "port": 18789,
     "mode": "local",
     "bind": "custom",
     "customBindHost": "127.0.0.1",
     "auth": {
       "mode": "token",
       "token": "${MASTER_API_TOKEN}"
-    }
-  },
-  "meta": {
-    "lastTouchedVersion": "2026.3.24",
-    "lastTouchedAt": "2026-03-29T01:02:09.173Z"
+    },
+    "port": 18789
   }
 }

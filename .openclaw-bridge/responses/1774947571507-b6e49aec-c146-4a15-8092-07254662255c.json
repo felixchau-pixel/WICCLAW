@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "available": true,
+  "reply": "I can help you create a quote for house cleaning. Let me run the quote workflow to generate one for you.",
+  "proposedActions": [
+    {
+      "deviceId": "mini_001",
+      "task": {
+        "type": "run_workflow",
+        "payload": {
+          "workflow": "quote",
+          "context": "house_cleaning"
+        }
+      },
+      "why": "Generate a quote for house cleaning services using the quote workflow"
+    }
+  ],
+  "blockers": []
+}

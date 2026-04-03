@@ -12,7 +12,8 @@ const {
   getAllDeviceStatuses,
   getDeviceStatus,
   getDeviceById,
-  pullNextTask,
+  peekNextTask,
+  claimNextTask,
   saveTaskResult,
   getTaskResult
 } = require('./services/deviceRegistry');
@@ -208,7 +209,8 @@ function createApp() {
   });
 
   app.get('/api/task/:deviceId', requireMasterToken, requireKnownDevice, (req, res) => {
-    const task = pullNextTask(req.params.deviceId);
+    const shouldClaim = String(req.headers['x-device-claim'] || '').toLowerCase() === 'true';
+    const task = shouldClaim ? claimNextTask(req.params.deviceId) : peekNextTask(req.params.deviceId);
     res.json({ ok: true, task });
   });
 

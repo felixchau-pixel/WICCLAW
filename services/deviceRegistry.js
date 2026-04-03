@@ -56,11 +56,14 @@ function buildPublicDevice(device) {
     return null;
   }
 
+  const online = isOnline(device);
+  const status = online ? (device.status || 'online') : 'offline';
+
   return {
     deviceId: device.deviceId,
     businessName: device.businessName || '',
     pairedTelegramUser: device.pairedTelegramUser || '',
-    status: device.status || 'unknown',
+    status,
     version: device.version || '',
     approvedFolder: device.approvedFolder || '',
     assistantMode: device.assistantMode || 'master-mediated',
@@ -70,7 +73,7 @@ function buildPublicDevice(device) {
     syncStatus: device.syncStatus || '',
     syncUpdatedAt: device.syncUpdatedAt || null,
     runtimeReady: Boolean(device.runtimeReady),
-    online: isOnline(device),
+    online,
     pendingTaskCount: Array.isArray(device.pendingTasks) ? device.pendingTasks.length : 0,
     resultCount: Array.isArray(device.results) ? device.results.length : 0
   };
@@ -246,7 +249,17 @@ function enqueueTask(deviceId, task, options = {}) {
   return record;
 }
 
-function pullNextTask(deviceId) {
+function peekNextTask(deviceId) {
+  const device = getDevicesMap()[deviceId];
+
+  if (!device || !Array.isArray(device.pendingTasks) || device.pendingTasks.length === 0) {
+    return null;
+  }
+
+  return device.pendingTasks[0];
+}
+
+function claimNextTask(deviceId) {
   const devices = getDevicesMap();
   const device = devices[deviceId];
 
@@ -254,10 +267,12 @@ function pullNextTask(deviceId) {
     return null;
   }
 
-  const nextTask = device.pendingTasks.shift();
-  nextTask.status = 'dispatched';
-  nextTask.dispatchedAt = new Date().toISOString();
-  writeDevicesMap(devices);
+  const nextTask = device.pendingTasks[0];
+  if (nextTask.status !== 'dispatched') {
+    nextTask.status = 'dispatched';
+    nextTask.dispatchedAt = new Date().toISOString();
+    writeDevicesMap(devices);
+  }
   return nextTask;
 }
 
@@ -269,7 +284,10 @@ function saveTaskResult(deviceId, taskId, result) {
     return { ok: false, error: 'Device not found' };
   }
 
+  device.pendingTasks = Array.isArray(device.pendingTasks) ? device.pendingTasks : [];
+  device.pendingTasks = device.pendingTasks.filter((entry) => entry.id !== taskId);
   device.results = Array.isArray(device.results) ? device.results : [];
+  device.results = device.results.filter((entry) => entry.taskId !== taskId);
   device.results.unshift({
     taskId,
     receivedAt: new Date().toISOString(),
@@ -300,7 +318,8 @@ module.exports = {
   verifyDeviceSecret,
   pairDevice,
   enqueueTask,
-  pullNextTask,
+  peekNextTask,
+  claimNextTask,
   saveTaskResult,
   getTaskResult,
   updateDeviceSync

@@ -77,6 +77,19 @@ EOF
 }
 
 if [[ "${1:-}" == "--run" ]]; then
+  MINI_SERVICE_DISABLED_FLAG=""
+  if [[ -f "$SCRIPT_DIR/.env" ]]; then
+    MINI_SERVICE_DISABLED_FLAG="$(awk -F= '/^MINI_SERVICE_DISABLED=/{print $2; exit}' "$SCRIPT_DIR/.env" 2>/dev/null || true)"
+  fi
+
+  if [[ "${MINI_SERVICE_DISABLED_FLAG}" == "true" ]]; then
+    if command -v systemctl >/dev/null 2>&1 && [[ "$(id -u)" -eq 0 ]]; then
+      systemctl disable "$SERVICE_NAME" >/dev/null 2>&1 || true
+      systemctl stop "$SERVICE_NAME" >/dev/null 2>&1 || true
+    fi
+    exit 0
+  fi
+
   NODE_EXECUTABLE="$(resolve_node_bin)" || {
     echo "Unable to locate node binary" >&2
     exit 127

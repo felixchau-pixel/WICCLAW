@@ -4,6 +4,7 @@ const SUPPORTED_TASK_TYPES = new Set([
   'delete_file',
   'move_file',
   'list_files',
+  'pwd',
   'summarize_file',
   'get_result',
   'exec_cmd'
@@ -87,6 +88,7 @@ function validateTask(task) {
     }
 
     case 'list_files':
+    case 'pwd':
       return { ok: true };
 
     case 'get_result':
